@@ -2,25 +2,24 @@ package org.example.setgame;
 
 
 import javafx.application.Application;
-import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.GridPane;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
 import javafx.stage.Stage;
 import persistance.HibernateCardsDAO;
 import persistance.HibernatePlayerDAO;
 import persistance.cardsDAO;
 import persistance.playerDAO;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -30,10 +29,11 @@ import java.util.List;
 public class SetGameWindow extends Application {
     ArrayList<Cards> cards = new ArrayList<>();
     public static ArrayList<ImageView> imageViews = new ArrayList<>();
-    Scene scene1,scene2;
+    public static ArrayList<ImageView> imageViews4hint = new ArrayList<>();
+    Scene scene1,scene2,scene3;
     private int players = 1;
     int gridUpdateCounter = 0;
-    PlayerWindows[] playerWindows;//Anzahl der Spieler
+    private List<PlayerWindows> playerWindows = new ArrayList<>();//Anzahl der Spieler
     GridPane grid;
     public static int kartenAngeklickt = 0;
     public static ArrayList<Cards> selectedCards = new ArrayList<>(3);
@@ -42,6 +42,14 @@ public class SetGameWindow extends Application {
     public static boolean setKlicked = false;
     public static int playerwhopressedSet;
     private Button endGame = new Button("End Game");
+    private Button hintButton = new Button("Hint");
+    private Button noSet = new Button("No Set");
+    private Button gameOver = new Button("Check Game Over");
+    private Button startAGame = new Button("Start a new Game!");
+    private VBox vbox2 = new VBox();
+    private boolean oneSetHighlighted = false;
+    private boolean noSetButtonPressed = false;
+
 
 
     public static void main(String[] args) {
@@ -96,13 +104,14 @@ public class SetGameWindow extends Application {
 
         //Spieler Fenster initzialisieren und auf Spielbrett wechseln
         start.setOnAction(e->{
+            //If you choose to play more games in a row
+            playerWindows.clear();
             //Altes Spiel Laden ja oder nein
             if (startFromPerrsistance.isSelected()) {
 
                 //Wie viele Spieler sind in der Datenbank
                 List<PlayerWindows> playerWindowsList = playerDAO.getAllPlayerWindow();
                 players = playerWindowsList.size();
-                playerWindows = new PlayerWindows[players];
                 //Spieler Fenster Laden und öffnen
                 // Check if playerWindowsList is not empty
                 if (!playerWindowsList.isEmpty()) {
@@ -110,10 +119,10 @@ public class SetGameWindow extends Application {
                     for (int i = 0; i < players; i++) {
                         PlayerWindows player = playerWindowsList.get(i);
                         if (player != null) {
-                            playerWindows[i] = player;
+                            playerWindows.add(player);
                             // Start playerStage only if player is not null
                             Stage playerStage = new Stage();
-                            playerWindows[i].start(playerStage, player.getPlayer(), player.getPlayerScore());
+                            playerWindows.get(i).start(playerStage, player.getPlayer(), player.getPlayerScore());
                         }
                     }
                 }
@@ -136,15 +145,14 @@ public class SetGameWindow extends Application {
             }else {
                 //Spieler im Array sammeln
                 setGameStage.setScene(scene2);
-                //Anzahl der Spieler der Arraygröße übergeben
-                playerWindows = new PlayerWindows[players];
+
                 //Spieler Fenster intialisieren
                 for (int i= 0; i < players; i++){
                     try {
                         PlayerWindows player1 = new PlayerWindows(i+1,0);
-                        playerWindows[i] = player1;
+                        playerWindows.add(player1);
                         Stage playerStage = new Stage();
-                        playerWindows[i].start(playerStage);
+                        playerWindows.get(i).start(playerStage);
 
                     } catch (Exception ex) {
                         ex.printStackTrace();
@@ -187,9 +195,9 @@ public class SetGameWindow extends Application {
             //Close Players
             for (int i = 0; i < players; i++) {
                 try {
-                    Stage playerStage = playerWindows[i].getStage();
+                    Stage playerStage = playerWindows.get(i).getStage();
                     if (playerStage != null) {
-                        playerWindows[i].getStage().close();
+                        playerWindows.get(i).getStage().close();
                         setGameStage.close();
                     }
                 } catch (Exception ex) {
@@ -198,8 +206,44 @@ public class SetGameWindow extends Application {
             }
 
         });
+        noSet.setOnAction(e ->{
+            if (checkGameOver()){
+                for (int i = 0; i < players; i++) {
+                    playerWindows.get(i).getStage().close();
+                }
+                initializeGameOverScreen();
+                buildGridPane(cards,4);
+                System.out.println("Screen3");
+                setGameStage.setScene(scene3);
+            } else{
+                if (noSetButtonPressed){
+                    Collections.shuffle(cards);
+                    if (checkGameOver()){
+                        setGameStage.setScene(scene2);
+                    }
+
+                }else{
+                    noSetButtonPressed = true;
+                }
+                buildGridPanePlus3(cards);
+            }
+
+        });
+        //Hint-Button
+        hintButton.setOnAction(e->{
+            highlightSET();
+        });
 
         scene2 = new Scene(grid,800,800);
+
+        //Schluss Szene
+        scene3 = new Scene(vbox2,800,800, Color.WHITE);
+        startAGame.setOnAction(e->{
+            initializeCardsDeck();
+            buildGridPane(cards,4);
+            setGameStage.setScene(scene1);
+        });
+
 
 
         //Setstage
@@ -254,6 +298,11 @@ public class SetGameWindow extends Application {
             if (isValidSet()) {
                 Integer[] arr = new Integer[3];
                 System.out.println("Valid set found!");
+                //Related to the Hint-Button
+                clearStyle();
+                oneSetHighlighted = false;
+                //Related to the noSet button
+                noSetButtonPressed = false;
                 for (int i = 0; i < cards.size(); i++) {
                     if (selectedCards.get(0) == cards.get(i)) {
                         arr[0] = i;
@@ -274,25 +323,24 @@ public class SetGameWindow extends Application {
                 buildGridPane(cards, 4);
                 //Timer stoppen im Spieler Fenster, welches SET gedrückt hat
                 System.out.println("True");
-                System.out.println(playerWindows[playerwhopressedSet].getPlayer());
-                System.out.println(playerwhopressedSet);
-                System.out.println(playerWindows[playerwhopressedSet].getPlayerScore());
-                playerWindows[playerwhopressedSet].start1orEnd0_PlayerTimer(false,playerWindows[playerwhopressedSet].getScoreLabel(),playerWindows[playerwhopressedSet].getTimeLeftLabel());
+                playerWindows.get(playerwhopressedSet).start1orEnd0_PlayerTimer(false,playerWindows.get(playerwhopressedSet).getScoreLabel(),playerWindows.get(playerwhopressedSet).getTimeLeftLabel());
                 //Spieler score um 1 erhöhen, bei dem der SET gedrückt hat
-                playerWindows[playerwhopressedSet].setPlayerScorePlus1();
+                playerWindows.get(playerwhopressedSet).setPlayerScorePlus1();
             } else {
                 System.out.println("Invalid set.");
                 setKlicked = false;
-                System.out.println(""+imageViews.size());
+                //Bezogen auf den Hint
+                clearStyle();
+                oneSetHighlighted = false;
                 //Reset Frame of Cards
                 for (int i = 0; i < imageViews.size(); i++) {
                     imageViews.get(i).setStyle("");
                 }
                 imageViews.clear();
                 //Timer stoppen im Spieler Fenster, welches SET gedrückt hat
-                playerWindows[playerwhopressedSet].start1orEnd0_PlayerTimer(false,playerWindows[playerwhopressedSet].getScoreLabel(),playerWindows[playerwhopressedSet].getTimeLeftLabel());
+                playerWindows.get(playerwhopressedSet).start1orEnd0_PlayerTimer(false,playerWindows.get(playerwhopressedSet).getScoreLabel(),playerWindows.get(playerwhopressedSet).getTimeLeftLabel());
                 //Spieler score um 1 verringern, bei dem der SET gedrückt hat
-                playerWindows[playerwhopressedSet].setPlayerScoreMinus1();
+                playerWindows.get(playerwhopressedSet).setPlayerScoreMinus1();
             }
             setKlicked = false;
             selectedCards.clear();
@@ -306,7 +354,7 @@ public class SetGameWindow extends Application {
         int numRows = 3;
         int counter = 0;
 
-
+        imageViews4hint.clear();
         grid.getChildren().clear();
 
         for (int row = 0; row < numRows; row++) {
@@ -317,7 +365,7 @@ public class SetGameWindow extends Application {
 
                 int index = row * numCols + col; // Berechnung des Index basierend auf row und col
                 ImageView imageView = new ImageView(cards.get(counter).getName()+".png");
-
+                imageViews4hint.add(imageView);
                 grid.add(imageView, col,row);
                 counter++;
 
@@ -347,21 +395,10 @@ public class SetGameWindow extends Application {
                 });
             }
         }
-        Button endGame = new Button("End Game");
-        Button noSet = new Button("No Set");
-        noSet.setOnAction(e ->{
-            buildGridPanePlus3(cards);
-        });
-
+        gridUpdateCounter++;
+        grid.add(hintButton,4,4);
         grid.add(noSet,2 ,4);
         grid.add(endGame,3 ,4);
-        if (gridUpdateCounter > 0){
-
-        }else{
-            gridUpdateCounter++;
-            System.out.println(gridUpdateCounter);
-
-        }
 
     }
     public void buildGridPane(ArrayList<Cards> cards, int p){
@@ -370,7 +407,7 @@ public class SetGameWindow extends Application {
         int numRows = 3;
         int counter = 0;
 
-
+        imageViews4hint.clear();
         grid.getChildren().clear();
 
         for (int row = 0; row < numRows; row++) {
@@ -381,10 +418,12 @@ public class SetGameWindow extends Application {
                 }
                 int index = row * numCols + col; // Berechnung des Index basierend auf row und col
                 ImageView imageView = new ImageView(cards.get(counter).getName()+".png");
+
                 if((index)%5 == 0){
 
                 } else {
                     grid.add(imageView, col,row);
+                    imageViews4hint.add(imageView);
                     counter++;
                 }
                 final int karteIndex = counter-1; // Variable, um den Index innerhalb des EventListeners zu halten
@@ -415,17 +454,11 @@ public class SetGameWindow extends Application {
             }
         }
 
-        Button noSet = new Button("No Set");
-        noSet.setOnAction(e ->{
-            buildGridPanePlus3(cards);
-        });
-
+        grid.add(hintButton,4,4);
         grid.add(noSet,2 ,4);
         grid.add(endGame,3 ,4);
         if (gridUpdateCounter > 0){
-
-        }else{
-            gridUpdateCounter++;
+            gridUpdateCounter = 0;
         }
     }
     public void initializeCardsDeck(){
@@ -444,4 +477,334 @@ public class SetGameWindow extends Application {
         //Karten mischen
         Collections.shuffle(cards);
     }
+    public void highlightSET() {
+        if (!oneSetHighlighted){
+            if (gridUpdateCounter > 0) {
+                int i= 0;
+                int j = 1;
+                int k = 2;
+                if (cards.size() >= 15){
+                    while (i < 15) {
+                        while (j < 15) {
+                            while (k < 15) {
+                                int shape1 = cards.get(i).getShape();
+                                int shape2 = cards.get(j).getShape();
+                                int shape3 = cards.get(k).getShape();
+
+                                int color1 = cards.get(i).getColour();
+                                int color2 = cards.get(j).getColour();
+                                int color3 = cards.get(k).getColour();
+
+                                int count1 = cards.get(i).getCount();
+                                int count2 = cards.get(j).getCount();
+                                int count3 = cards.get(k).getCount();
+
+                                int filling1 = cards.get(i).getFilling();
+                                int filling2 = cards.get(j).getFilling();
+                                int filling3 = cards.get(k).getFilling();
+
+                                // Check shapes
+                                boolean shapesValid = (shape1 == shape2 && shape2 == shape3) ||
+                                        (shape1 != shape2 && shape2 != shape3 && shape1 != shape3);
+
+                                // Check colors
+                                boolean colorsValid = (color1 == color2 && color2 == color3) ||
+                                        (color1 != color2 && color2 != color3 && color1 != color3);
+
+                                // Check counts
+                                boolean countsValid = (count1 == count2 && count2 == count3) ||
+                                        (count1 != count2 && count2 != count3 && count1 != count3);
+
+                                // Check fillings
+                                boolean fillingsValid = (filling1 == filling2 && filling2 == filling3) ||
+                                        (filling1 != filling2 && filling2 != filling3 && filling1 != filling3);
+
+                                // Check if all attributes are valid
+                                if (shapesValid && colorsValid && countsValid && fillingsValid) {
+                                    imageViews4hint.get(i).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(j).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(k).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    //Making the while loops collapse after first set is found
+                                    i = 15;
+                                    j = 15;
+                                    k = 15;
+                                    oneSetHighlighted = true;
+                                }
+
+                                k++;
+                            }
+                            j++;
+                            k = j+1;
+                        }
+                        i++;
+                        j = i;
+                    }
+                }else {
+                    while (i < cards.size()) {
+                        while (j < cards.size()) {
+                            while (k < cards.size()) {
+                                int shape1 = cards.get(i).getShape();
+                                int shape2 = cards.get(j).getShape();
+                                int shape3 = cards.get(k).getShape();
+
+                                int color1 = cards.get(i).getColour();
+                                int color2 = cards.get(j).getColour();
+                                int color3 = cards.get(k).getColour();
+
+                                int count1 = cards.get(i).getCount();
+                                int count2 = cards.get(j).getCount();
+                                int count3 = cards.get(k).getCount();
+
+                                int filling1 = cards.get(i).getFilling();
+                                int filling2 = cards.get(j).getFilling();
+                                int filling3 = cards.get(k).getFilling();
+
+                                // Check shapes
+                                boolean shapesValid = (shape1 == shape2 && shape2 == shape3) ||
+                                        (shape1 != shape2 && shape2 != shape3 && shape1 != shape3);
+
+                                // Check colors
+                                boolean colorsValid = (color1 == color2 && color2 == color3) ||
+                                        (color1 != color2 && color2 != color3 && color1 != color3);
+
+                                // Check counts
+                                boolean countsValid = (count1 == count2 && count2 == count3) ||
+                                        (count1 != count2 && count2 != count3 && count1 != count3);
+
+                                // Check fillings
+                                boolean fillingsValid = (filling1 == filling2 && filling2 == filling3) ||
+                                        (filling1 != filling2 && filling2 != filling3 && filling1 != filling3);
+
+                                // Check if all attributes are valid
+                                if (shapesValid && colorsValid && countsValid && fillingsValid) {
+                                    imageViews4hint.get(i).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(j).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(k).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    //Making the while loops collapse after first set is found
+                                    i = 15;
+                                    j = 15;
+                                    k = 15;
+                                    oneSetHighlighted = true;
+                                }
+
+                                k++;
+                            }
+                            j++;
+                            k = j+1;
+                        }
+                        i++;
+                        j = i;
+                    }
+                }
+
+            }else {
+                int i = 0;
+                int j = 1;
+                int k = 2;
+                if (cards.size() >= 12){
+                    while (i < 12) {
+                        while (j < 12) {
+                            while (k < 12) {
+                                int shape1 = cards.get(i).getShape();
+                                int shape2 = cards.get(j).getShape();
+                                int shape3 = cards.get(k).getShape();
+
+                                int color1 = cards.get(i).getColour();
+                                int color2 = cards.get(j).getColour();
+                                int color3 = cards.get(k).getColour();
+
+                                int count1 = cards.get(i).getCount();
+                                int count2 = cards.get(j).getCount();
+                                int count3 = cards.get(k).getCount();
+
+                                int filling1 = cards.get(i).getFilling();
+                                int filling2 = cards.get(j).getFilling();
+                                int filling3 = cards.get(k).getFilling();
+
+                                // Check shapes
+                                boolean shapesValid = (shape1 == shape2 && shape2 == shape3) ||
+                                        (shape1 != shape2 && shape2 != shape3 && shape1 != shape3);
+
+                                // Check colors
+                                boolean colorsValid = (color1 == color2 && color2 == color3) ||
+                                        (color1 != color2 && color2 != color3 && color1 != color3);
+
+                                // Check counts
+                                boolean countsValid = (count1 == count2 && count2 == count3) ||
+                                        (count1 != count2 && count2 != count3 && count1 != count3);
+
+                                // Check fillings
+                                boolean fillingsValid = (filling1 == filling2 && filling2 == filling3) ||
+                                        (filling1 != filling2 && filling2 != filling3 && filling1 != filling3);
+
+                                // Check if all attributes are valid
+                                if (shapesValid && colorsValid && countsValid && fillingsValid) {
+                                    imageViews4hint.get(i).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(j).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(k).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    //Making the while loops collapse after first set is found
+                                    i = 12;
+                                    j = 12;
+                                    k = 12;
+                                    oneSetHighlighted = true;
+                                }
+                                k++;
+                            }
+                            j++;
+                            k = j+1;
+                        }
+                        i++;
+                        j = i;
+                    }
+                }else{
+                    while (i < cards.size()) {
+                        while (j < cards.size()) {
+                            while (k < cards.size()) {
+                                int shape1 = cards.get(i).getShape();
+                                int shape2 = cards.get(j).getShape();
+                                int shape3 = cards.get(k).getShape();
+
+                                int color1 = cards.get(i).getColour();
+                                int color2 = cards.get(j).getColour();
+                                int color3 = cards.get(k).getColour();
+
+                                int count1 = cards.get(i).getCount();
+                                int count2 = cards.get(j).getCount();
+                                int count3 = cards.get(k).getCount();
+
+                                int filling1 = cards.get(i).getFilling();
+                                int filling2 = cards.get(j).getFilling();
+                                int filling3 = cards.get(k).getFilling();
+
+                                // Check shapes
+                                boolean shapesValid = (shape1 == shape2 && shape2 == shape3) ||
+                                        (shape1 != shape2 && shape2 != shape3 && shape1 != shape3);
+
+                                // Check colors
+                                boolean colorsValid = (color1 == color2 && color2 == color3) ||
+                                        (color1 != color2 && color2 != color3 && color1 != color3);
+
+                                // Check counts
+                                boolean countsValid = (count1 == count2 && count2 == count3) ||
+                                        (count1 != count2 && count2 != count3 && count1 != count3);
+
+                                // Check fillings
+                                boolean fillingsValid = (filling1 == filling2 && filling2 == filling3) ||
+                                        (filling1 != filling2 && filling2 != filling3 && filling1 != filling3);
+
+                                // Check if all attributes are valid
+                                if (shapesValid && colorsValid && countsValid && fillingsValid) {
+                                    imageViews4hint.get(i).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(j).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    imageViews4hint.get(k).setStyle("-fx-effect: innershadow(gaussian, green, 10, 0.5, 0, 0);");
+                                    //Making the while loops collapse after first set is found
+                                    i = 12;
+                                    j = 12;
+                                    k = 12;
+                                    oneSetHighlighted = true;
+                                }
+                                k++;
+                            }
+                            j++;
+                            k = j+1;
+                        }
+                        i++;
+                        j = i;
+                    }
+                }
+
+            }
+        }else {
+            clearStyle();
+            oneSetHighlighted = false;
+        }
+
+
+    }
+    public void clearStyle(){
+        for (int i = 0; i < imageViews4hint.size(); i++) {
+            imageViews4hint.get(i).setStyle("");
+        }
+    }
+    public boolean checkGameOver(){
+        boolean gameOver = true;
+        int i = 0;
+        int j = 1;
+        int k = 2;
+        while (i < cards.size()) {
+            while (j < cards.size()) {
+                while (k < cards.size()) {
+                    int shape1 = cards.get(i).getShape();
+                    int shape2 = cards.get(j).getShape();
+                    int shape3 = cards.get(k).getShape();
+
+                    int color1 = cards.get(i).getColour();
+                    int color2 = cards.get(j).getColour();
+                    int color3 = cards.get(k).getColour();
+
+                    int count1 = cards.get(i).getCount();
+                    int count2 = cards.get(j).getCount();
+                    int count3 = cards.get(k).getCount();
+
+                    int filling1 = cards.get(i).getFilling();
+                    int filling2 = cards.get(j).getFilling();
+                    int filling3 = cards.get(k).getFilling();
+
+                    // Check shapes
+                    boolean shapesValid = (shape1 == shape2 && shape2 == shape3) ||
+                            (shape1 != shape2 && shape2 != shape3 && shape1 != shape3);
+
+                    // Check colors
+                    boolean colorsValid = (color1 == color2 && color2 == color3) ||
+                            (color1 != color2 && color2 != color3 && color1 != color3);
+
+                    // Check counts
+                    boolean countsValid = (count1 == count2 && count2 == count3) ||
+                            (count1 != count2 && count2 != count3 && count1 != count3);
+
+                    // Check fillings
+                    boolean fillingsValid = (filling1 == filling2 && filling2 == filling3) ||
+                            (filling1 != filling2 && filling2 != filling3 && filling1 != filling3);
+
+                    // Check if all attributes are valid
+                    if (shapesValid && colorsValid && countsValid && fillingsValid) {
+                        gameOver = false;
+                    }
+                    k++;
+                }
+                j++;
+                k = j+1;
+            }
+            i++;
+            j = i;
+        }
+        return gameOver;
+    }
+    public void initializeGameOverScreen(){
+        Label label = new Label("Game Over");
+        label.setFont(new Font(20));
+        Integer[] array = new Integer[players];
+        for (int i = 0; i < players;i++){
+            array[i]=playerWindows.get(i).getPlayerScore();
+        }
+        Arrays.sort(array);
+        Collections.reverse(Arrays.asList(array));
+        for (int i = 0; i < players; i++){
+            for (int j = 0; j < players; j++){
+                if (array[i]==playerWindows.get(j).getPlayerScore()&& i==0){
+                    Label label1 = new Label("Player "+playerWindows.get(j).getPlayer()+" wins");
+                    label1.setFont(new Font(15));
+                    vbox2.getChildren().add(label1);
+                }
+                if (array[i]==playerWindows.get(j).getPlayerScore()){
+                    Label label1 = new Label("Place NR."+(i+1)+" Player: "+playerWindows.get(j).getPlayer()+" Score: "+playerWindows.get(j).getPlayerScore());
+                    label1.setFont(new Font(10));
+                    vbox2.getChildren().add(label1);
+                }
+            }
+        }
+        vbox2.getChildren().add(startAGame);
+        vbox2.setAlignment(Pos.CENTER);
+    }
 }
+

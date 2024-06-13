@@ -10,6 +10,7 @@ import org.hibernate.Transaction;
 import org.hibernate.query.Query;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class HibernatePlayerDAO implements playerDAO{
@@ -55,14 +56,14 @@ public class HibernatePlayerDAO implements playerDAO{
         return playerWindowsList;
     }
     @Override
-    public void saveAllPlayerWindows(PlayerWindows[] playerWindows) {
+    public void saveAllPlayerWindows(List<PlayerWindows> playerWindows) {
         Session session = HibernateUtil.getSessionFactory().openSession();
         Transaction tx = null;
 
         try{
             tx = session.beginTransaction();
-            for (int i = 0;i<playerWindows.length;i++){
-                PlayerWindows player = playerWindows[i];
+            for (int i = 0;i<playerWindows.size();i++){
+                PlayerWindows player = playerWindows.get(i);
                 session.saveOrUpdate(player);
             }
 

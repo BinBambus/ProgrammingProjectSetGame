@@ -9,6 +9,6 @@ import java.util.List;
 public interface playerDAO {
     PlayerWindows getPlayerWindow(int id);
     List<PlayerWindows> getAllPlayerWindow();
-    void saveAllPlayerWindows(PlayerWindows[] playerWindows);
+    void saveAllPlayerWindows(List<PlayerWindows> playerWindows);
     void deleteAllPlayers(List<PlayerWindows> playerWindows);
 }
